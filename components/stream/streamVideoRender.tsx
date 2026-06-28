@@ -1,0 +1,438 @@
+"use client";
+
+import {
+  CallingState,
+  StreamCall,
+  StreamTheme,
+  StreamVideo,
+  ParticipantView,
+  type StreamVideoParticipant,
+  useCallStateHooks,
+  ToggleAudioPublishingButton,
+  CancelCallButton,
+} from "@stream-io/video-react-sdk";
+import {motion} from "motion/react";
+import {useInterviewSession} from "@/hooks/useInterviewSession";
+import {useInterviewAgent} from "@/hooks/useInterviewAgent";
+import {useLiveFeedback} from "@/hooks/useLiveFeedback";
+import {useInterviewPosture} from "@/hooks/useInterviewPosture";
+import {useInterviewFinalization} from "@/hooks/useInterviewFinalization";
+import {useInterviewSectionStatus} from "@/hooks/useInterviewSectionStatus";
+import {Spinner} from "@/components/ui/spinner";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import {PanelLeft, UserRound} from "lucide-react";
+import {PiStarFourFill} from "react-icons/pi";
+import "@stream-io/video-react-sdk/dist/css/styles.css";
+import AgentAvatar from "../ui/agent-avatar";
+import {getSectionLabel} from "@/utils/interview-config";
+import type {InterviewSetupConfig} from "@/utils/types";
+import {GrUserNew} from "react-icons/gr";
+import {IconType} from "react-icons/lib";
+import {PiSealQuestionThin} from "react-icons/pi";
+import {Separator} from "../ui/separator";
+import {AnimatedThemeToggler} from "../ui/animated-theme-toggler";
+import React from "react";
+
+export default function StreamVideoCallRender({
+  config,
+  userId,
+  userName,
+  userToken,
+}: {
+  config: InterviewSetupConfig;
+  userId: string;
+  userName: string;
+  userToken: string;
+}) {
+  const {client, call, callId, isReady} = useInterviewSession({
+    config,
+    userId,
+    userName,
+    userToken,
+  });
+
+  if (!client || !call || !isReady) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen w-full gap-4 px-4">
+        <motion.div
+          initial={{opacity: 0, y: 10}}
+          animate={{opacity: 1, y: 0}}
+          className="flex flex-col items-center gap-4 text-center"
+        >
+          <div className="p-3 border dark:border-zinc-800 border-gray-300 bg-muted/20 dark:bg-zinc-900/20">
+            <div className="p-3 border dark:border-zinc-800 border-gray-200 bg-background dark:bg-zinc-950 shadow-sm">
+              <Spinner className="h-8 w-8 text-blue-950 dark:text-zinc-200" />
+            </div>
+          </div>
+          <p className="text-lg md:text-xl font-bold tracking-tight text-blue-950 dark:text-zinc-100 animate-pulse">
+            Configuring interview session...
+          </p>
+          <p className="text-base md:text-xl font-semibold tracking-tight text-blue-900 dark:text-zinc-300 max-w-[280px] md:max-w-none mx-auto">
+            Best Of Luck, Your Interview is about to start!
+          </p>
+          <p className="text-sm md:text-base font-semibold tracking-tight text-blue-900 dark:text-zinc-300 max-w-[280px] md:max-w-none mx-auto">
+            (Must avoid background noise for best experience.)
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <StreamVideo client={client}>
+      <StreamCall call={call}>
+        <InterviewLayout
+          callId={callId}
+          config={config}
+          userId={userId}
+          userName={userName}
+        />
+      </StreamCall>
+    </StreamVideo>
+  );
+}
+
+const InterviewLayout = ({
+  callId,
+  config,
+  userId,
+  userName,
+}: {
+  callId: string | null;
+  config: InterviewSetupConfig;
+  userId: string;
+  userName: string;
+}) => {
+  const [hasClickedNudge, setHasClickedNudge] = React.useState(false);
+  const {useCallCallingState, useLocalParticipant, useRemoteParticipants} =
+    useCallStateHooks();
+  const callingState = useCallCallingState();
+  const localParticipant = useLocalParticipant();
+  const remoteParticipants = useRemoteParticipants();
+  const coachParticipant = remoteParticipants[0];
+  const midFeedback = useLiveFeedback({callId, callingState});
+  const sectionStatus = useInterviewSectionStatus({callId, callingState});
+  const {
+    videoRef,
+    canvasRef,
+    postureScore,
+    nudgeMessage,
+    hasCamera,
+    getPostureStats,
+  } = useInterviewPosture(callingState);
+
+  useInterviewAgent({callId, role: config.role, callingState});
+  useInterviewFinalization({
+    callId,
+    role: config.role,
+    userId,
+    callingState,
+    getPostureStats,
+  });
+
+  if (callingState === CallingState.LEFT) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen w-full gap-4">
+        <Spinner className="h-6 w-6 text-blue-950 dark:text-zinc-200" />
+        <p className="text-sm font-bold text-blue-950 dark:text-zinc-200 uppercase">
+          Ending Call...
+        </p>
+      </div>
+    );
+  }
+
+  if (
+    callingState === CallingState.RECONNECTING ||
+    callingState === CallingState.MIGRATING
+  ) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full w-full gap-4">
+        <Spinner className="h-6 w-6 text-blue-950 dark:text-zinc-200" />
+        <p className="text-sm font-bold text-blue-950 dark:text-zinc-200 uppercase">
+          Reconnecting...
+        </p>
+      </div>
+    );
+  }
+
+  if (callingState !== CallingState.JOINED) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen w-full gap-4">
+        <Spinner className="h-6 w-6 text-blue-950 dark:text-zinc-200" />
+        <p className="text-sm font-bold text-blue-950 dark:text-zinc-200 uppercase">
+          Ending Call...
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <SidebarProvider
+      defaultOpen
+      style={{"--sidebar-width": "24rem"} as React.CSSProperties}
+    >
+      <div className="h-[calc(100vh)] w-full flex items-center justify-center overflow-hidden">
+        <SidebarInset className="bg-transparent">
+          <div className="flex h-full">
+            <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-1 flex-col px-4 pb-4 pt-5 md:px-6">
+              <div className="mb-3 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase text-blue-900/55 dark:text-zinc-400">
+                    Interview Stage
+                  </p>
+                  <h2 className="text-xl font-bold text-blue-950 dark:text-zinc-100">
+                    {config.role}
+                  </h2>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-zinc-400">
+                    <span className="rounded-full border dark:border-zinc-800 border-blue-950/10 dark:bg-zinc-900/80 bg-white/70 dark:text-zinc-300 px-1.5 py-0.5 text-xs font-medium">
+                      {config.seniority}
+                    </span>
+                    {sectionStatus ? (
+                      <>
+                        <span className="rounded-full border dark:border-zinc-800 border-blue-950/10 dark:bg-zinc-900/80 bg-white/70 dark:text-zinc-300 px-2 py-0.5 text-xs font-medium">
+                          {sectionStatus.currentSectionLabel ??
+                            (sectionStatus.currentSection
+                              ? getSectionLabel(sectionStatus.currentSection)
+                              : "Section pending")}
+                        </span>
+                        <span className="rounded-full border dark:border-zinc-800 border-blue-950/10 dark:bg-zinc-900/80 bg-white/70 dark:text-zinc-300 px-2 py-0.5 text-xs font-medium">
+                          {formatElapsedTime(sectionStatus.elapsedSeconds)} /{" "}
+                          {formatElapsedTime(sectionStatus.durationSeconds)}
+                        </span>
+                        <span className="rounded-full border dark:border-zinc-800 border-blue-950/10 dark:bg-zinc-900/80 bg-white/70 dark:text-zinc-300 px-2 py-0.5 text-xs font-medium">
+                          {sectionStatus.questionsCompleted} answered
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <AnimatedThemeToggler />
+                  <div className="relative">
+                    <SidebarTrigger 
+                      onClick={() => setHasClickedNudge(true)}
+                      className="inline-flex text-sm font-semibold text-blue-950 dark:text-zinc-200 shadow-sm backdrop-blur"
+                    >
+                      <PanelLeft className="mr-2 h-4 w-4" />
+                    </SidebarTrigger>
+                    <MobileFeedbackNudge hidden={hasClickedNudge} />
+                  </div>
+                </div>
+              </div>
+
+              <StreamTheme className="mt-8 flex min-h-0 flex-1 flex-col bg-transparent">
+                {sectionStatus?.currentQuestion ? (
+                  <div className="mx-auto mb-3 w-full shrink-0 rounded-sm border dark:border-zinc-800 border-blue-950/10 dark:bg-zinc-900/80 bg-white/85 px-5 py-3">
+                    <div className="mb-2 flex items-center gap-1 text-xs font-medium uppercase text-blue-900/60 dark:text-zinc-400">
+                      <PiSealQuestionThin className="h-4 w-4" />
+                      Current Question
+                    </div>
+                    <p className="text-xs text-slate-800 dark:text-zinc-200 md:text-sm">
+                      {sectionStatus.currentQuestion}
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="mx-auto grid min-h-0 w-full flex-1 max-w-8xl auto-rows-fr grid-cols-1 gap-4 lg:grid-cols-2">
+                  <InterviewStageTile
+                    icon={UserRound}
+                    label={userName || "You"}
+                    participant={localParticipant}
+                    accent="from-sky-500/30 via-cyan-500/15 to-transparent"
+                  />
+                  <InterviewStageTile
+                    icon={GrUserNew}
+                    label="Interview Coach"
+                    participant={coachParticipant}
+                    accent="from-blue-950/40 via-blue-800/20 to-transparent"
+                  />
+                </div>
+
+                <div className="mt-4 flex shrink-0 items-center justify-center gap-4 pb-2">
+                  <ToggleAudioPublishingButton />
+                  <CancelCallButton />
+                </div>
+              </StreamTheme>
+            </div>
+
+            <Sidebar
+              side="right"
+              variant="floating"
+              collapsible="offcanvas"
+              className="top-1/2 bottom-auto -translate-y-1/2 justify-center border-none! p-0! [&>[data-sidebar=sidebar]]:border-none! rounded-lg! max-h-[calc(70vh)] h-auto shadow-2xl"
+            >
+              <SidebarHeader className="p-2.5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sidebar-foreground dark:text-zinc-100 flex items-center gap-2">
+                    <PiStarFourFill className="w-3.5 h-3.5 backdrop-brightness-200 text-neutral-700 dark:text-neutral-300" />
+                    Live Interview Feedback
+                  </h3>
+                </div>
+              </SidebarHeader>
+              <Separator />
+              <SidebarContent className="p-2.5 items-center justify-center">
+                <SidebarGroup className="p-0">
+                  <SidebarGroupLabel className="px-2 text-sm text-sidebar-foreground/65 dark:text-zinc-400 flex items-center">
+                    Live Guidance
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent className="px-1">
+                    {midFeedback ? (
+                      <div className="rounded dark:border-0 border border-sidebar-border/70 dark:bg-zinc-900/80 bg-white/80 p-2.5 shadow-lg">
+                        <div className="mb-1.5 flex items-center justify-between">
+                          <div className="flex items-center text-sm text-slate-800 dark:text-zinc-200">
+                            Last Answer Feedback
+                          </div>
+                          <span className="rounded-none dark:bg-amber-500/20 dark:text-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">
+                            {midFeedback.score}/10
+                          </span>
+                        </div>
+                        <p className="text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
+                          {midFeedback.short_feedback}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="rounded dark:border-0 border border-sidebar-border/70 dark:bg-zinc-900/50 dark:text-zinc-400 bg-white/55 p-2.5 text-xs text-slate-500 shadow-lg">
+                        Live feedback will appear here once the conversation is
+                        underway.
+                      </div>
+                    )}
+                  </SidebarGroupContent>
+                </SidebarGroup>
+
+                <SidebarGroup className="p-0 pt-4">
+                  <SidebarGroupLabel className="px-2 text-sm dark:text-zinc-400 text-sidebar-foreground/65">
+                    Presence Tracking
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent className="px-1">
+                    <div className="rounded dark:border-0 border border-sidebar-border/70 dark:bg-zinc-900/80 bg-white/85 px-3 py-2.5">
+                      <div className="mb-0.5 flex items-center justify-between">
+                        <div className="mb-2 text-sm flex items-center gap-2 text-slate-800 dark:text-zinc-200">
+                          Posture & Presence
+                        </div>
+                        <span className="rounded-none dark:bg-amber-500/20 dark:text-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">
+                          {postureScore}/1
+                        </span>
+                      </div>
+
+                      {hasCamera === false ? (
+                        <div className="flex items-center justify-center w-full aspect-video rounded-md dark:bg-zinc-800/50 dark:text-zinc-400 dark:border-zinc-700 bg-gray-100 text-sm text-gray-500 font-medium border border-dashed border-gray-300">
+                          Camera disabled
+                        </div>
+                      ) : (
+                        <div className="relative mx-auto w-full aspect-video rounded-xs overflow-hidden dark:bg-zinc-900 bg-gray-100">
+                          <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <canvas
+                            ref={canvasRef}
+                            width={400}
+                            height={300}
+                            className="absolute inset-0 w-full h-full object-cover z-10 dark:opacity-80"
+                          />
+                        </div>
+                      )}
+
+                      <div className="mt-2 text-xs leading-relaxed font-medium text-slate-700 dark:text-zinc-300">
+                        <span
+                          className={
+                            postureScore < 0.5
+                              ? "text-red-500"
+                              : "text-emerald-600"
+                          }
+                        >
+                          {postureScore < 0.5 ? "Poor - " : "Good - "}{" "}
+                          {nudgeMessage || "Posture looks good!"}
+                        </span>
+                      </div>
+                    </div>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </SidebarContent>
+            </Sidebar>
+          </div>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
+  );
+};
+
+function formatElapsedTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function MobileFeedbackNudge({ hidden }: { hidden: boolean }) {
+  const { isMobile, openMobile } = useSidebar();
+  if (!isMobile || openMobile || hidden) return null;
+
+  return (
+    <div className="absolute top-10 right-0 animate-bounce z-[100] md:hidden">
+      <div className="bg-sky-600 dark:bg-sky-500 text-white text-[11px] px-3 py-1.5 rounded-lg shadow-xl font-medium whitespace-nowrap relative border border-sky-400">
+         Click here to see feedbacks
+        <div className="absolute -top-1.5 right-3 w-3 h-3 bg-sky-600 dark:bg-sky-500 rotate-45 border-l border-t border-sky-400 rounded-sm" />
+      </div>
+    </div>
+  );
+}
+
+const InterviewStageTile = ({
+  participant,
+  label,
+  icon: Icon,
+  accent,
+}: {
+  participant?: StreamVideoParticipant;
+  label: string;
+  icon: IconType;
+  accent: string;
+}) => {
+  return (
+    <div className="relative w-full h-full overflow-hidden rounded-sm border dark:border-zinc-800 border-blue-950/10 dark:bg-zinc-950 bg-blue-950 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.55)]">
+      <div
+        className={`pointer-events-none absolute inset-0 bg-linear-to-br ${accent}`}
+      />
+      <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 py-4">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/90 backdrop-blur">
+          <Icon className="h-3 w-3" />
+          {label}
+        </div>
+      </div>
+
+      <div className="relative h-full w-full">
+        {participant ? (
+          <ParticipantView
+            participant={participant}
+            className="h-full w-full"
+            muteAudio={participant.isLocalParticipant}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm font-medium text-white/60">
+            <div className="text-center">
+              <AgentAvatar seed="Interviewer" size={80} />
+              <p className="mt-2 text-neutral-500 text-sm dark:text-zinc-400">
+                Interviewer
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
