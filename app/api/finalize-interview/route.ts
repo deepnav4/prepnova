@@ -49,7 +49,7 @@ type RemoteReportContext = {
 };
 
 if (!INTERVIEW_API_BASE_URL) {
-  throw new Error("INTERVIEW_API_BASE_URL is not configured");
+  console.warn("Warning: INTERVIEW_API_BASE_URL is not configured");
 }
 
 async function fetchJsonWithTimeout<T>(
